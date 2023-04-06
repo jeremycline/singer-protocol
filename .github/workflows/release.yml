@@ -1,0 +1,87 @@
+---
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        type: choice
+        description: feature or bugfix release
+        options:
+          - feature
+          - bugfix
+        required: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          # Pull all history and tags
+          fetch-depth: 0
+
+      - name: Install latest stable Rust release
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rust-docs
+
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install dependencies
+        run: cargo install cargo-edit
+
+      - name: Tag release
+        run: |
+          set -x
+
+          package="singer-protocol"
+          CURRENT_RELEASE="v"$(head -5 Cargo.toml | grep "^version.=." | awk '{gsub("\"", ""); print $3}')"
+          if [ "${{ github.event.inputs.release_type }}" == "feature" ]; then
+            cargo set-version -p $package --bump minor
+          else
+            cargo set-version -p $package --bump patch
+          fi
+          cargo check
+          NEW_RELEASE=v"$(head -5 Cargo.toml | grep "^version.=." | awk '{gsub("\"", ""); print $3}')"
+
+          git config --global user.email "github-bot@jcline.org"
+          git config --global user.name "Automated Release"
+          git checkout -b release
+          git add --all
+          git commit -m "$NEW_RELEASE"
+          printf "# %s\n\n" "$NEW_RELEASE" > changelog
+          printf "# Changes since %s\n\n" "$CURRENT_RELEASE" >> changelog
+          git diff --stat "$CURRENT_RELEASE".. >> changelog
+          git tag --annotate --file changelog "$NEW_RELEASE"
+          git checkout main
+          git pull
+          git merge release
+          git push origin main
+          git push origin "$NEW_RELEASE"
+
+          echo "TAG=$NEW_RELEASE" >> $GITHUB_ENV
+
+      - name: Create documentation
+        run: cargo doc --document-private-items --no-deps
+
+      - name: Bundle up the docs
+        run: tar cvzf singer-protocol-"$TAG".tar.gz target/doc
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          body_path: changelog
+          tag_name: ${{ env.TAG }}
+          generate_release_notes: true
+          files: |
+            ./singer-protocol-${{ env.TAG }}.tar.gz

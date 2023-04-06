@@ -1,0 +1,23 @@
+[package]
+name = "singer-protocol"
+version = "0.1.0"
+edition = "2021"
+description = "Message structures and utilities to make implementing Singer taps and targets easier."
+license = "MIT"
+documentation = "https://docs.rs/singer-protocol"
+readme = "README.md"
+repository = "https://github.com/jeremycline/singer-protocol"
+rust-version = "1.56"
+keywords = ["singer", "meltano", "elt", "etl"]
+categories = ["data-structures"]
+
+[dependencies.serde]
+version = "1"
+features = ["derive"]
+
+[dependencies.serde_json]
+version = "1"
+
+[dependencies.time]
+version = "0.3"
+features = ["serde", "formatting", "parsing"]
